@@ -1,30 +1,76 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
+import 'package:todos/api.dart';
 import 'package:todos/main.dart';
 
+/// A tiny in-memory stand-in for the backend.
+MockClient fakeBackend() {
+  final tasks = <Map<String, dynamic>>[];
+  return MockClient((req) async {
+    final json = {'content-type': 'application/json'};
+    if (req.method == 'GET' && req.url.path == '/tasks') {
+      return http.Response(jsonEncode(tasks), 200, headers: json);
+    }
+    if (req.method == 'POST' && req.url.path == '/tasks') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final task = {
+        'id': tasks.length + 1,
+        'title': body['title'],
+        'description': body['description'] ?? '',
+        'status': body['status'] ?? 'todo',
+        'inserted_at': '2026-10-25T15:13:12.754Z',
+      };
+      tasks.add(task);
+      return http.Response(jsonEncode(task), 201, headers: json);
+    }
+    final match = RegExp(r'^/tasks/(\d+)$').firstMatch(req.url.path);
+    if (req.method == 'PATCH' && match != null) {
+      final id = int.parse(match.group(1)!);
+      final task = tasks.firstWhere((t) => t['id'] == id);
+      task.addAll(jsonDecode(req.body) as Map<String, dynamic>);
+      return http.Response(jsonEncode(task), 200, headers: json);
+    }
+    return http.Response('{"error":"not found"}', 404);
+  });
+}
+
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('create a task, then change its status', (tester) async {
+    final api = TaskApi(baseUrl: 'http://test', client: fakeBackend());
+    await tester.pumpWidget(TodosApp(api: api));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.textContaining('No tasks yet'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.byTooltip('New task'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Buy milk');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Buy milk'), findsOneWidget);
+    expect(find.byIcon(Icons.radio_button_unchecked), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.radio_button_unchecked));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.timelapse), findsOneWidget);
+  });
+
+  testWidgets('empty title is rejected', (tester) async {
+    final api = TaskApi(baseUrl: 'http://test', client: fakeBackend());
+    await tester.pumpWidget(TodosApp(api: api));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('New task'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Title is required'), findsOneWidget);
   });
 }
