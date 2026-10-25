@@ -5,16 +5,28 @@ use axum::{
     routing::{get, patch},
 };
 use sqlx::SqlitePool;
+use std::path::Path as FsPath;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{CreateTask, Task, UpdateTask};
 
-pub fn router(pool: SqlitePool) -> Router {
+pub fn app_router(pool: SqlitePool, static_dir: Option<&FsPath>) -> Router {
+    let app = Router::new().nest("/api", api_router(pool));
+    match static_dir {
+        None => app,
+        Some(dir) => app
+            .fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")))),
+    }
+}
+
+pub fn api_router(pool: SqlitePool) -> Router {
     Router::new()
         .route("/tasks", get(list_tasks).post(create_task))
         .route("/tasks/{id}", patch(update_task))
         .with_state(pool)
+        .fallback(|| async { StatusCode::NOT_FOUND })
 }
 
 async fn list_tasks(State(pool): State<SqlitePool>) -> Result<Json<Vec<Task>>, ApiError> {

@@ -9,7 +9,7 @@ String defaultApiUrl() {
   const fromEnv = String.fromEnvironment('API_URL');
   if (fromEnv.isNotEmpty) return fromEnv;
   if (kIsWeb) return Uri.base.resolve('/api').toString();
-  return 'http://localhost:3000';
+  return 'http://localhost:3000/api';
 }
 
 class ApiException implements Exception {
