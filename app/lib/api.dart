@@ -40,6 +40,7 @@ class TaskApi {
     required String title,
     String description = '',
     TaskStatus? status,
+    int? parentId,
   }) async {
     final res = await _client.post(
       Uri.parse('$baseUrl/tasks'),
@@ -48,6 +49,7 @@ class TaskApi {
         'title': title,
         'description': description,
         if (status != null) 'status': status.wire,
+        'parent_id': ?parentId,
       }),
     );
     return Task.fromJson(_decode(res) as Map<String, dynamic>);

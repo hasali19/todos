@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'task.dart';
 import 'task_form_page.dart';
+import 'task_tile.dart';
 
 class TaskListPage extends StatefulWidget {
   const TaskListPage({super.key, required this.api});
@@ -41,6 +42,11 @@ class _TaskListPageState extends State<TaskListPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
   }
 
+  List<Task> _subtasksOf(Task task) => [
+    for (final t in _tasks ?? <Task>[])
+      if (t.parentId == task.id) t,
+  ];
+
   void _replace(Task updated) {
     setState(() {
       _tasks = [
@@ -58,17 +64,13 @@ class _TaskListPageState extends State<TaskListPage> {
   }
 
   Future<void> _openForm([Task? task]) async {
-    final saved = await Navigator.of(context).push<Task>(
+    await Navigator.of(context).push<Task>(
       MaterialPageRoute(
         builder: (_) => TaskFormPage(api: widget.api, task: task),
       ),
     );
-    if (saved == null || !mounted) return;
-    if (task == null) {
-      setState(() => _tasks = [...?_tasks, saved]);
-    } else {
-      _replace(saved);
-    }
+    // Reload even if nothing was saved here: subtasks may have changed.
+    if (mounted) await _load();
   }
 
   @override
@@ -94,7 +96,7 @@ class _TaskListPageState extends State<TaskListPage> {
   }
 
   Widget _buildBody() {
-    final tasks = _tasks;
+    final tasks = _tasks?.where((t) => t.parentId == null).toList();
     if (tasks == null && _error != null) {
       return _Message(
         icon: Icons.cloud_off,
@@ -111,7 +113,10 @@ class _TaskListPageState extends State<TaskListPage> {
         child: ListView(
           children: const [
             SizedBox(height: 120),
-            _Message(icon: Icons.checklist, text: 'No tasks yet. Tap + to add one.'),
+            _Message(
+              icon: Icons.checklist,
+              text: 'No tasks yet. Tap + to add one.',
+            ),
           ],
         ),
       );
@@ -124,54 +129,13 @@ class _TaskListPageState extends State<TaskListPage> {
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {
           final task = tasks[i];
-          return _TaskTile(
+          return TaskTile(
             task: task,
+            subtasks: _subtasksOf(task),
             onTap: () => _openForm(task),
             onStatusTap: () => _cycleStatus(task),
           );
         },
-      ),
-    );
-  }
-}
-
-class _TaskTile extends StatelessWidget {
-  const _TaskTile({
-    required this.task,
-    required this.onTap,
-    required this.onStatusTap,
-  });
-
-  final Task task;
-  final VoidCallback onTap;
-  final VoidCallback onStatusTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final done = task.status == TaskStatus.done;
-    return ListTile(
-      onTap: onTap,
-      leading: IconButton(
-        tooltip: '${task.status.label} – tap to change',
-        icon: Icon(statusIcon(task.status), color: statusColor(context, task.status)),
-        onPressed: onStatusTap,
-      ),
-      title: Text(
-        task.title,
-        style: done
-            ? TextStyle(
-                decoration: TextDecoration.lineThrough,
-                color: theme.colorScheme.onSurfaceVariant,
-              )
-            : null,
-      ),
-      subtitle: task.description.isEmpty
-          ? null
-          : Text(task.description, maxLines: 2, overflow: TextOverflow.ellipsis),
-      trailing: Text(
-        formatDate(task.insertedAt),
-        style: theme.textTheme.bodySmall,
       ),
     );
   }
@@ -201,25 +165,4 @@ class _Message extends StatelessWidget {
       ),
     );
   }
-}
-
-IconData statusIcon(TaskStatus status) => switch (status) {
-      TaskStatus.todo => Icons.radio_button_unchecked,
-      TaskStatus.inProgress => Icons.timelapse,
-      TaskStatus.done => Icons.check_circle,
-    };
-
-Color statusColor(BuildContext context, TaskStatus status) {
-  final scheme = Theme.of(context).colorScheme;
-  return switch (status) {
-    TaskStatus.todo => scheme.outline,
-    TaskStatus.inProgress => scheme.tertiary,
-    TaskStatus.done => scheme.primary,
-  };
-}
-
-String formatDate(DateTime dt) {
-  final local = dt.toLocal();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${local.year}-${two(local.month)}-${two(local.day)}';
 }

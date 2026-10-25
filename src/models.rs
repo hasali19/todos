@@ -16,6 +16,7 @@ pub struct Task {
     pub title: String,
     pub description: String,
     pub status: TaskStatus,
+    pub parent_id: Option<i64>,
     #[sqlx(try_from = "jiff_sqlx::Timestamp")]
     pub inserted_at: Timestamp,
 }
@@ -26,6 +27,7 @@ pub struct CreateTask {
     #[serde(default)]
     pub description: String,
     pub status: Option<TaskStatus>,
+    pub parent_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

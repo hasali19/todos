@@ -140,3 +140,45 @@ async fn serves_web_app() {
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn subtasks() {
+    let app = app().await;
+
+    let (_, parent) = send(&app, "POST", "/api/tasks", Some(json!({ "title": "Trip" }))).await;
+    assert_eq!(parent["parent_id"], Value::Null);
+    let parent_id = parent["id"].as_i64().unwrap();
+
+    let (status, sub) = send(
+        &app,
+        "POST",
+        "/api/tasks",
+        Some(json!({ "title": "Book flights", "parent_id": parent_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(sub["parent_id"], parent_id);
+
+    // Subtasks can have their own subtasks.
+    let (status, subsub) = send(
+        &app,
+        "POST",
+        "/api/tasks",
+        Some(json!({ "title": "Compare prices", "parent_id": sub["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(subsub["parent_id"], sub["id"]);
+
+    let (_, list) = send(&app, "GET", "/api/tasks", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 3);
+
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/tasks",
+        Some(json!({ "title": "Orphan", "parent_id": 999 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

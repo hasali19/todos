@@ -30,7 +30,8 @@ pub fn api_router(pool: SqlitePool) -> Router {
 }
 
 async fn list_tasks(State(pool): State<SqlitePool>) -> Result<Json<Vec<Task>>, ApiError> {
-    Ok(Json(db::get_tasks(&pool).await?))
+    let mut conn = pool.acquire().await?;
+    Ok(Json(db::get_tasks(&mut conn).await?))
 }
 
 async fn create_task(
@@ -38,7 +39,19 @@ async fn create_task(
     Json(input): Json<CreateTask>,
 ) -> Result<(StatusCode, Json<Task>), ApiError> {
     validate_title(&input.title)?;
-    let task = db::create_task(&pool, input).await?;
+
+    let mut tx = pool.begin().await?;
+
+    if let Some(parent_id) = input.parent_id
+        && db::get_task(&mut tx, parent_id).await?.is_none()
+    {
+        return Err(ApiError::BadRequest("parent task not found".into()));
+    }
+
+    let task = db::create_task(&mut tx, input).await?;
+
+    tx.commit().await?;
+
     Ok((StatusCode::CREATED, Json(task)))
 }
 
@@ -51,7 +64,8 @@ async fn update_task(
         validate_title(title)?;
     }
 
-    let task = db::update_task(&pool, id, input)
+    let mut conn = pool.acquire().await?;
+    let task = db::update_task(&mut conn, id, input)
         .await?
         .ok_or(ApiError::NotFound)?;
 

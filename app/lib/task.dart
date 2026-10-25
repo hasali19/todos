@@ -22,6 +22,7 @@ class Task {
     required this.description,
     required this.status,
     required this.insertedAt,
+    this.parentId,
   });
 
   final int id;
@@ -30,11 +31,15 @@ class Task {
   final TaskStatus status;
   final DateTime insertedAt;
 
+  /// Set when this task is a subtask of another task.
+  final int? parentId;
+
   factory Task.fromJson(Map<String, dynamic> json) => Task(
-        id: json['id'] as int,
-        title: json['title'] as String,
-        description: json['description'] as String,
-        status: TaskStatus.fromWire(json['status'] as String),
-        insertedAt: DateTime.parse(json['inserted_at'] as String),
-      );
+    id: json['id'] as int,
+    title: json['title'] as String,
+    description: json['description'] as String,
+    status: TaskStatus.fromWire(json['status'] as String),
+    insertedAt: DateTime.parse(json['inserted_at'] as String),
+    parentId: json['parent_id'] as int?,
+  );
 }

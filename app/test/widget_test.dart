@@ -23,6 +23,7 @@ MockClient fakeBackend() {
         'title': body['title'],
         'description': body['description'] ?? '',
         'status': body['status'] ?? 'todo',
+        'parent_id': body['parent_id'],
         'inserted_at': '2026-10-25T15:13:12.754Z',
       };
       tasks.add(task);
@@ -49,7 +50,10 @@ void main() {
 
     await tester.tap(find.byTooltip('New task'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, 'Title'), 'Buy milk');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Title'),
+      'Buy milk',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -72,5 +76,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Title is required'), findsOneWidget);
+  });
+
+  testWidgets('add a subtask from the edit page', (tester) async {
+    final api = TaskApi(baseUrl: 'http://test', client: fakeBackend());
+    await api.createTask(title: 'Plan trip');
+    await tester.pumpWidget(TodosApp(api: api));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Plan trip'));
+    await tester.pumpAndSettle();
+    expect(find.text('No subtasks yet.'), findsOneWidget);
+
+    await tester.tap(find.text('Add subtask'));
+    await tester.pumpAndSettle();
+    expect(find.text('New subtask'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Title'),
+      'Book flights',
+    );
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Back on the parent's edit page, the subtask is listed.
+    expect(find.text('Book flights'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // The main list only shows top-level tasks, with subtask progress.
+    expect(find.text('Plan trip'), findsOneWidget);
+    expect(find.text('Book flights'), findsNothing);
+    expect(find.text('0/1 subtasks'), findsOneWidget);
   });
 }
